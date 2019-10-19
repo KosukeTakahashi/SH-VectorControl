@@ -1,4 +1,4 @@
-Optimizing Linkage Editor (V.10.02.01.000)        18-Oct-2019 15:31:36
+Optimizing Linkage Editor (V.10.02.01.000)        19-Oct-2019 17:58:36
 
 *** Options ***
 
@@ -15,6 +15,7 @@ Optimizing Linkage Editor (V.10.02.01.000)        18-Oct-2019 15:31:36
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\intprg.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\resetprg.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\sbrk.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\systime_intr.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\vecttbl.obj"
 -library="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.lib"
@@ -32,22 +33,22 @@ DVECTTBL
 DINTTBL
                                   00000010  000003ff       3f0   4
 PIntPRG
-                                  00000400  00000563       164   4
+                                  00000400  00000593       194   4
 PResetPRG
-                                  00000800  0000082f        30   4
+                                  00000800  0000082b        2c   4
 P
-                                  00001000  00002e8d      1e8e   4
+                                  00001000  00003039      203a   4
 C
-                                  00002e90  00002eef        60   4
+                                  0000303c  0000309b        60   4
 C$BSEC
-                                  00002ef0  00002ef7         8   4
+                                  0000309c  000030a3         8   4
 C$DSEC
-                                  00002ef8  00002f03         c   4
+                                  000030a4  000030af         c   4
 D
-                                  00002f04  00002f0f         c   4
+                                  000030b0  000030cb        1c   4
 B
                                   ffffa000  ffffa403       404   4
 R
-                                  ffffa404  ffffa40f         c   4
+                                  ffffa404  ffffa41f        1c   4
 S
                                   ffffbc00  ffffbfff       400   4

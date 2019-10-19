@@ -51,19 +51,28 @@ extern "C"
 #include "iodefine.h"
 #include "mathf.h"
 #include "cpwm.h"
+#include "systime_intr.h"
 
 #define PI 3.141592653589793
-#define PHI 2.094395102392667       // 2π / 3
-#define K_P 1.0f                    // P制御ゲイン
-#define K_I 1.0f                    // I制御ゲイン
-#define MAX_CURRENT 100.0f          // 電流センサ上限 [A]
-#define CPWM_CARRIER_CYCLE 8000     // 相補PWMキャリア周期
-#define CPWM_DEADTIME 100           // 相補PWMデッドタイム
-#define TGR_ADJUSTER 10             // TGR補正用
-#define TGR_LIMIT 4000              // TGR上限値
-#define VOLTAGE_ADJUSTER_PERCENT 80 // 電圧値補正用
-#define VOLTAGE_MAX 100.0f          // 電圧の最大値、これ以上ならこの値に固定
-#define VOLTAGE_MIN -100.0f         // 電圧の最小値、これ以下ならこの値に固定
+#define PHI 2.094395102392667              // 2π / 3
+#define K_P_ANG_VEL 1.0f                   // P制御ゲイン (角速度制御)
+#define K_I_ANG_VEL 1.0f                   // I制御ゲイン (角速度制御)
+#define K_P_TORQUE 1.0f                    // P制御ゲイン (トルク制御)
+#define K_I_TORQUE 1.0f                    // I制御ゲイン (トルク制御)
+#define MAX_CURRENT 100.0f                 // 電流センサ上限 [A]
+#define CPWM_CARRIER_CYCLE 8000            // 相補PWMキャリア周期
+#define CPWM_DEADTIME 100                  // 相補PWMデッドタイム
+#define TGR_ADJUSTER 10                    // TGR補正用
+#define TGR_LIMIT 4000                     // TGR上限値
+#define VOLTAGE_ADJUSTER_PERCENT 80        // 電圧値補正用
+#define VOLTAGE_MAX 100.0f                 // 電圧の最大値、これ以上ならこの値に固定
+#define VOLTAGE_MIN -100.0f                // 電圧の最小値、これ以下ならこの値に固定
+#define ANGULAR_VELOCITY_MAX 121.203420277 // 角速度最大値 [rad/s], 14 in. で 100 km/h
+
+float integral_delta_i_d = 0.0f;    // ∫d(ΔI_d)
+float integral_delta_i_q = 0.0f;    // ∫d(ΔI_q)
+float previous_theta = 0.0f;        // 前回計測したロータ回転角
+unsigned long previous_systime = 0; // 前回取得したシステム時刻
 
 typedef struct struct_tgr_values
 {
@@ -71,10 +80,6 @@ typedef struct struct_tgr_values
     int v;
     int w;
 } tgr_values;
-
-float integral_delta_i_d = 0.0f; // ∫d(ΔI_d)
-float integral_delta_i_q = 0.0f; // ∫d(ΔI_q)
-float previous_theta = 0.0f;     // 前回計測したロータ回転角
 
 int adjust_tgr(int tgr_value)
 {
@@ -115,6 +120,7 @@ tgr_values vc_intr(void)
     float i_v = 0.0f;      // V相電流値
     float i_w = 0.0f;      // W相電流値
     float i_dc = 0.0f;     // DC電流値
+    float omega = 0.0f;    // ロータ角速度
     float theta = 0.0f;    // ロータ回転角
     int acc = 0;           // アクセル
     int rot_direction = 1; // 1 = 正転; -1 = 逆転
@@ -128,6 +134,9 @@ tgr_values vc_intr(void)
     int resolver = 0;
     float i_alpha = 0.0f;
     float i_beta = 0.0f;
+    float delta_systime = 0.0f;
+    float omega_ref = 0.0f;
+    float delta_omega = 0.0f;
     float i_d = 0.0f;
     float i_q = 0.0f;
     float i_d_ref = 0.0f;
@@ -182,7 +191,7 @@ tgr_values vc_intr(void)
     // theta = convert_to_radian(AD1.ADDR4 >> 6);
     // theta = convert_to_radian(ad_theta);
     theta = convert_to_radian(resolver);
-    acc = 100 * ad_acc / 1024;
+    // acc = 100 * ad_acc / 1024;
 
     // if (theta < PHI)
     // {
@@ -200,9 +209,9 @@ tgr_values vc_intr(void)
     //     PE.DRL.BIT.B1 = 1;
     // }
 
-    /*********************************
-     *    UVW -> Alpha&Beta -> dq    *
-     *********************************/
+    /***************************************
+     *    UVW -> Alpha&Beta -> dq          *
+     ***************************************/
     i_alpha = i_u + i_v * cosf(PHI) + i_w * cosf(-PHI);
     i_beta = i_v + sinf(PHI) + i_w * sinf(-PHI);
     // i_d = i_beta * cosf(theta) - i_alpha * sinf(theta);
@@ -210,12 +219,19 @@ tgr_values vc_intr(void)
     i_d = i_beta * cosf(theta) + i_alpha * sinf(theta);
     i_q = i_alpha * cosf(theta) - i_beta * sinf(theta);
 
-    /*********************************
-     *    PI Control (torque)        *
-     *********************************/
-    i_d_ref = 0.0f;                              // I_d 理想値
-    i_q_ref = (float)acc * (float)rot_direction; // I_q 理想値
+    /***************************************
+     *    PI Control (angular velocity)    *
+     ***************************************/
+    delta_systime = (float)(get_systime() - previous_systime) / 1000.0f;
+    omega = (theta - previous_theta) / delta_systime;
+    omega_ref = ANGULAR_VELOCITY_MAX * (float)ad_acc / 1024.0f;
+    delta_omega = omega_ref - omega;
+    i_d_ref = 0.0f;                      // I_d 理想値
+    i_q_ref = K_P_ANG_VEL * delta_omega; // I_q 理想値
 
+    /***************************************
+     *    PI Control (torque)              *
+     ***************************************/
     delta_i_d = i_d - i_d_ref;
     delta_i_q = i_q - i_q_ref;
     integral_delta_i_d += delta_i_d;
@@ -223,12 +239,12 @@ tgr_values vc_intr(void)
 
     //v_d = K_P * delta_i_d + K_I * integral_delta_i_d;
     //v_q = K_P * delta_i_q + K_I * integral_delta_i_q;
-    v_d = K_P * delta_i_d;
-    v_q = K_P * delta_i_q;
+    v_d = K_P_TORQUE * delta_i_d;
+    v_q = K_P_TORQUE * delta_i_q;
 
-    /*********************************
-     *    dq -> Alpha&Beta -> UVW    *
-     *********************************/
+    /***************************************
+     *    dq -> Alpha&Beta -> UVW          *
+     ***************************************/
     // v_alpha = v_d * cosf(theta) - v_q * sinf(theta);
     // v_beta = v_q * cosf(theta) + v_d * sinf(theta);
     v_alpha = v_q * cosf(theta) + v_d * sinf(theta);
@@ -284,6 +300,7 @@ void main(void)
     PFC.PECRL2.BIT.PE4MD = 0;
     PFC.PECRL2.BIT.PE6MD = 0;
 
+    init_CMT0_intr(1);
     start_cpwm();
 
     while (1)

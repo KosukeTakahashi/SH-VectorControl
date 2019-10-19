@@ -1,5 +1,5 @@
 #ifndef CPWM_H
-#define CPWM_h
+#define CPWM_H
 
 void init_cpwm(int carrier_cycle, int deadtime, int init_tgr_u, int init_tgr_v, int init_tgr_w);
 void start_cpwm(void);

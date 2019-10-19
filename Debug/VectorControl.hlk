@@ -10,6 +10,7 @@
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\intprg.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\resetprg.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\sbrk.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\systime_intr.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.obj"
 -input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\vecttbl.obj"
 -library="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.lib"

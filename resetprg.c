@@ -26,24 +26,25 @@
 *
 *********************************************************************/
 
-#include	<machine.h>
-#include	<_h_c_lib.h>
+#include <machine.h>
+#include <_h_c_lib.h>
 //#include	<stddef.h>					// Remove the comment when you use errno
 //#include 	<stdlib.h>					// Remove the comment when you use rand()
-#include	"typedefine.h"
-#include	"stacksct.h"
+#include "typedefine.h"
+#include "stacksct.h"
 
-#define SR_Init    0x000000F0
+#define SR_Init 0x00000000
 #define INT_OFFSET 0x10
 
 extern _UINT INT_Vectors;
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
-void PowerON_Reset_PC(void);
-void Manual_Reset_PC(void);
-void main(void);
+	void PowerON_Reset_PC(void);
+	void Manual_Reset_PC(void);
+	void main(void);
 #ifdef __cplusplus
 }
 #endif
@@ -59,7 +60,7 @@ void main(void);
 
 //extern void srand(_UINT);		// Remove the comment when you use rand()
 //extern _SBYTE *_s1ptr;				// Remove the comment when you use strtok()
-		
+
 //#ifdef __cplusplus				// Use Hardware Setup
 //extern "C" {
 //#endif
@@ -67,7 +68,7 @@ void main(void);
 //#ifdef __cplusplus
 //}
 //#endif
-	
+
 //#ifdef __cplusplus			// Remove the comment when you use global class object
 //extern "C" {					// Sections C$INIT and C$END will be generated
 //#endif
@@ -85,30 +86,31 @@ void PowerON_Reset_PC(void)
 {
 	set_vbr((void *)((_UBYTE *)&INT_Vectors - INT_OFFSET));
 
-//	HardwareSetup();				// Use Hardware Setup
+	//	HardwareSetup();				// Use Hardware Setup
 
 	_INITSCT();
 
-//	_CALL_INIT();					// Remove the comment when you use global class object
+	//	_CALL_INIT();					// Remove the comment when you use global class object
 
-//	_INIT_IOLIB();					// Enable I/O in the application(both SIM I/O and hardware I/O)
+	//	_INIT_IOLIB();					// Enable I/O in the application(both SIM I/O and hardware I/O)
 
-//	errno=0;						// Remove the comment when you use errno
-//	srand((_UINT)1);					// Remove the comment when you use rand()
-//	_s1ptr=NULL;					// Remove the comment when you use strtok()
+	//	errno=0;						// Remove the comment when you use errno
+	//	srand((_UINT)1);					// Remove the comment when you use rand()
+	//	_s1ptr=NULL;					// Remove the comment when you use strtok()
 
 	set_cr(SR_Init);
 
 	main();
 
-//	_CLOSEALL();					// Close I/O in the application(both SIM I/O andhardware I/O)
+	//	_CLOSEALL();					// Close I/O in the application(both SIM I/O andhardware I/O)
 
-//	_CALL_END();					// Remove the comment when you use global class object
+	//	_CALL_END();					// Remove the comment when you use global class object
 
-	while(1);
+	while (1)
+		;
 }
 
 //#pragma entry Manual_Reset_PC		// Remove the comment when you use Manual Reset
-void Manual_Reset_PC(void)	
+void Manual_Reset_PC(void)
 {
 }
