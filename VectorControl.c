@@ -67,7 +67,7 @@ extern "C"
 #define VOLTAGE_ADJUSTER_PERCENT 80        // 電圧値補正用
 #define VOLTAGE_MAX 100.0f                 // 電圧の最大値、これ以上ならこの値に固定
 #define VOLTAGE_MIN -100.0f                // 電圧の最小値、これ以下ならこの値に固定
-#define ANGULAR_VELOCITY_MAX 121.203420277 // 角速度最大値 [rad/s], 14 in. で 100 km/h
+#define ANGULAR_VELOCITY_MAX 281.249964843 // 角速度最大値 [rad/s], 14 in. で 100 km/h
 
 float integral_delta_i_d = 0.0f;    // ∫d(ΔI_d)
 float integral_delta_i_q = 0.0f;    // ∫d(ΔI_q)
