@@ -1,0 +1,4 @@
+-cpu=sh2
+-output="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.lib"
+-gbr=auto
+-head=runtime,new,mathf,stdio,stdlib,string

@@ -1,0 +1,53 @@
+Optimizing Linkage Editor (V.10.02.01.000)        18-Oct-2019 15:31:36
+
+*** Options ***
+
+-subcommand=C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.hlk
+-noprelink
+-rom=D=R
+-nomessage
+-list="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.map"
+-nooptimize
+-start=DVECTTBL,DINTTBL,PIntPRG/00,PResetPRG/0800,P,C,C$BSEC,C$DSEC,D/01000,B,R/0FFFFA000,S/0FFFFBC00
+-nologo
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\cpwm.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\dbsct.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\intprg.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\resetprg.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\sbrk.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.obj"
+-input="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\vecttbl.obj"
+-library="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.lib"
+-output="C:\Users\Kosuke\Develop\SH\VectorControl\VectorControl\Debug\VectorControl.abs"
+-end
+
+*** Error information ***
+
+*** Mapping List ***
+
+SECTION                            START      END         SIZE   ALIGN
+
+DVECTTBL
+                                  00000000  0000000f        10   4
+DINTTBL
+                                  00000010  000003ff       3f0   4
+PIntPRG
+                                  00000400  00000563       164   4
+PResetPRG
+                                  00000800  0000082f        30   4
+P
+                                  00001000  00002e8d      1e8e   4
+C
+                                  00002e90  00002eef        60   4
+C$BSEC
+                                  00002ef0  00002ef7         8   4
+C$DSEC
+                                  00002ef8  00002f03         c   4
+D
+                                  00002f04  00002f0f         c   4
+B
+                                  ffffa000  ffffa403       404   4
+R
+                                  ffffa404  ffffa40f         c   4
+S
+                                  ffffbc00  ffffbfff       400   4
