@@ -226,8 +226,12 @@ tgr_values vc_intr(void)
     omega = (theta - previous_theta) / delta_systime;
     omega_ref = ANGULAR_VELOCITY_MAX * (float)ad_acc / 1024.0f;
     delta_omega = omega_ref - omega;
-    i_d_ref = 0.0f;                      // I_d 理想値
-    i_q_ref = K_P_ANG_VEL * delta_omega; // I_q 理想値
+    // i_d_ref = 0.0f;                      // I_d 理想値
+    // i_q_ref = K_P_ANG_VEL * delta_omega; // I_q 理想値
+
+    // AT もどき作る？
+    i_d_ref = (K_P_ANG_VEL * delta_omega) * sinf(0); // Id 理想値
+    i_q_ref = (K_P_ANG_VEL * delta_omega) * cosf(0); // Iq 理想値
 
     /***************************************
      *    PI Control (torque)              *
