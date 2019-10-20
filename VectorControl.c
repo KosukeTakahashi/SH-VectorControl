@@ -26,14 +26,14 @@ extern "C"
 /*
  *                                       PIN
  *                 CN1                                           CN2
- *  PE00 ADSTATE| 01 02 |    PE01 ADSTATE |    PA00   F/B     | 01 02 |  PA01    BST
+ *  PE00 NONE   | 01 02 |    PE01 NONE    |    PA00   F/B     | 01 02 |  PA01    BST
  *  PE02 NONE   | 03 04 |    PE03 FBRK    |    PA02   PBRK    | 01 02 |  PA03    RX
  *  PE04 DMS    | 05 06 |    PE05 NONE    |    PA04   TX      | 05 06 |  PA05    RES0
  *  PE06 PROTECT| 07 08 |    PE07 NONE    |    PA06   RES1    | 07 08 |  PA07    RES2
  *  PE08 PWMTGL | 09 10 |    PE09 PWM_U   |    PA08   RES3    | 09 10 |  PA09    RES4
  *  PE10 NC     | 11 12 |    PE11 PWM_U'  |    PA10   RES5    | 11 12 |  PA11    RES6
  *  PE12 PWM_V  | 13 14 |    PE13 PWM_W   |    PA12   RES7    | 13 14 |  PA13    RES8
- *  PE14 PWM_V' | 15 16 |    PE15 PWM_W'  |    PA14   RES9    | 15 16 |  PA15    NONE
+ *  PE14 PWM_V' | 15 16 |    PE15 PWM_W'  |    PA14   RES9    | 15 16 |  PA15    RESERR
  *  PF00 I_U    | 17 18 |    PF01 I_V     |    PB01   NONE    | 17 18 |  PB02    NONE
  *  PF02 I_W    | 19 20 |    PF03 I_DC    |    PB03   NONE    | 19 20 |  PB05    NONE
  *  PF04 ACC1   | 21 22 |    PF05 ACC2    |    PB16   NONE    | 21 22 |  RES     NONE
@@ -60,6 +60,8 @@ extern "C"
 #define K_P_TORQUE 1.0f                    // P制御ゲイン (トルク制御)
 #define K_I_TORQUE 1.0f                    // I制御ゲイン (トルク制御)
 #define MAX_CURRENT 100.0f                 // 電流センサ上限 [A]
+#define MIN_CURRENT_AD 205                 // 電流センサの線形性が保証されるAD変換値の下限 (1.0V に相当)
+#define MAX_CURRENT_AD 819                 // 電流センサの線形性が保証されるAD変換値の上限 (4.0V に相当)
 #define CPWM_CARRIER_CYCLE 8000            // 相補PWMキャリア周期
 #define CPWM_DEADTIME 100                  // 相補PWMデッドタイム
 #define TGR_ADJUSTER 10                    // TGR補正用
@@ -67,12 +69,49 @@ extern "C"
 #define VOLTAGE_ADJUSTER_PERCENT 80        // 電圧値補正用
 #define VOLTAGE_MAX 100.0f                 // 電圧の最大値、これ以上ならこの値に固定
 #define VOLTAGE_MIN -100.0f                // 電圧の最小値、これ以下ならこの値に固定
-#define ANGULAR_VELOCITY_MAX 281.249964843 // 角速度最大値 [rad/s], 14 in. で 100 km/h
+#define MAX_ANGULAR_VELOCITY 281.249964843 // 角速度最大値 [rad/s], 14 in. で 100 km/h
+#define RELATIVE_SPEED_REVERSED 0.1        // 逆回転時の最高速度 (順回転時の最高速度に対する比率)
 
 float integral_delta_i_d = 0.0f;    // ∫d(ΔI_d)
 float integral_delta_i_q = 0.0f;    // ∫d(ΔI_q)
 float previous_theta = 0.0f;        // 前回計測したロータ回転角
 unsigned long previous_systime = 0; // 前回取得したシステム時刻
+
+/*
+ * (!!) 先に resolver = 1023 を確実に検出できるか要確認
+ *
+ *     if (resolver == 1023)
+ *     {
+ *         resolver_phase++;
+ *         resolver_phase %= 3;
+ *     }
+ *     switch (resolver_phase)
+ *     {
+ *         case 0:
+ *             PE.DRL.BIT.B0 = 0;
+ *             PE.DRL.BIT.B1 = 0;
+ *             break;
+ *         case 1:
+ *             PE.DRL.BIT.B0 = 1;
+ *             PE.DRL.BIT.B1 = 0;
+ *             break;
+ *         case 2:
+ *             PE.DRL.BIT.B0 = 1;
+ *             PE.DRL.BIT.B1 = 1;
+ *             break;
+ *         default:
+ *             PE.DRL.BIT.B0 = 0;
+ *             PE.DRL.BIT.B1 = 0;
+ *             break;
+ *     }
+ *
+ * レゾルバが3倍角で計測するのでその対応
+ * θをロータ回転角として
+ * θ ∈ [0°, 120°)   で フェーズ0
+ * θ ∈ [120°, 240°) で フェーズ1
+ * θ ∈ [240°, 360°) で フェーズ2
+ */
+unsigned char roter_phase = 0;
 
 typedef struct struct_tgr_values
 {
@@ -90,12 +129,34 @@ int adjust_tgr(int tgr_value)
 
 float convert_to_current(int ad)
 {
-    return 2.0f * (float)MAX_CURRENT * (float)ad / 1024.0f - (float)MAX_CURRENT;
+    // return 2.0f * (float)MAX_CURRENT * (float)ad / 1024.0f - (float)MAX_CURRENT;
+
+    const float current_range = 2.0f * (float)MAX_CURRENT;
+    const float current_ad_range = (float)(MAX_CURRENT_AD - MIN_CURRENT_AD);
+    float current_adjuster = current_range * 512.0f / current_ad_range;
+    if (ad < MIN_CURRENT_AD)
+    {
+        return -MAX_CURRENT;
+    }
+    else if (MAX_CURRENT_AD < ad)
+    {
+        return MAX_CURRENT;
+    }
+    else
+    {
+        return ((float)ad * current_range / current_ad_range) + current_adjuster;
+    }
 }
 
 float convert_to_radian(int ad)
 {
-    return 2.0f * PI * ((float)ad / 1024.0f) / 3.0f;
+    // return 2.0f * PI * ((float)ad / 1024.0f) / 3.0f;
+
+    // ↓↓ レゾルバ値 1023 を確実に検出できるならこっち ↓↓
+    // return 2.0f * PI * (float)(roter_phase * 1024 + ad) / 1024.0f;
+
+    // ↓↓ できないならこっち ↓↓
+    return 2.0f * PI * ((float)ad * 3.0f / 1024.0f);
 }
 
 int convert_to_tgr(float voltage)
@@ -116,44 +177,44 @@ int convert_to_tgr(float voltage)
 
 tgr_values vc_intr(void)
 {
-    float i_u = 0.0f;      // U相電流値
-    float i_v = 0.0f;      // V相電流値
-    float i_w = 0.0f;      // W相電流値
-    float i_dc = 0.0f;     // DC電流値
-    float omega = 0.0f;    // ロータ角速度
-    float theta = 0.0f;    // ロータ回転角
-    int acc = 0;           // アクセル
-    int rot_direction = 1; // 1 = 正転; -1 = 逆転
+    float i_u = 0.0f;   // U相電流値
+    float i_v = 0.0f;   // V相電流値
+    float i_w = 0.0f;   // W相電流値
+    float i_dc = 0.0f;  // DC電流値
+    float omega = 0.0f; // ロータ角速度
+    float theta = 0.0f; // ロータ回転角
+    int acc = 0;        // アクセル
 
-    int ad_i_u = 0;
-    int ad_i_v = 0;
-    int ad_i_w = 0;
-    int ad_i_dc = 0;
-    int ad_acc = 0;
-    int is_forward = 1;
-    int resolver = 0;
-    float i_alpha = 0.0f;
-    float i_beta = 0.0f;
-    float delta_systime = 0.0f;
-    float omega_ref = 0.0f;
-    float delta_omega = 0.0f;
-    float i_d = 0.0f;
-    float i_q = 0.0f;
-    float i_d_ref = 0.0f;
-    float i_q_ref = 0.0f;
-    float delta_i_d = 0.0f;
-    float delta_i_q = 0.0f;
-    float v_d = 0.0f;
-    float v_q = 0.0f;
-    float v_alpha = 0.0f;
-    float v_beta = 0.0f;
-    float v_u = 0.0f;
-    float v_v = 0.0f;
-    float v_w = 0.0f;
-    int tgr_u = 0;
-    int tgr_v = 0;
-    int tgr_w = 0;
-    tgr_values tgr_vals;
+    int ad_i_u = 0;             // U相電流 AD変換値
+    int ad_i_v = 0;             // V相電流 AD変換値
+    int ad_i_w = 0;             // W相電流 AD変換値
+    int ad_i_dc = 0;            // DC電流 AD変換値
+    int ad_acc = 0;             // アクセル AD変換値
+    int is_forward = 1;         // 前後進スイッチ 前進か？
+    int resolver = 0;           // レゾルバの値
+    float i_alpha = 0.0f;       // α軸電流
+    float i_beta = 0.0f;        // β軸電流
+    float delta_systime = 0.0f; // 前回の計測から経過したシステム時間 [s]
+    float omega_ref = 0.0f;     // ロータ角速度理想値
+    float delta_omega = 0.0f;   // ロータ角速度理想値との偏差
+    float psy = 0.0f;           // 作り出す磁束ベクトルとd軸がなす角, ATシステム用
+    float i_d = 0.0f;           // d軸電流
+    float i_q = 0.0f;           // q軸電流
+    float i_d_ref = 0.0f;       // d軸電流理想値
+    float i_q_ref = 0.0f;       // q軸電流理想値
+    float delta_i_d = 0.0f;     // d軸電流理想値との偏差
+    float delta_i_q = 0.0f;     // q軸電流理想値との偏差
+    float v_d = 0.0f;           // d軸電圧
+    float v_q = 0.0f;           // q軸電圧
+    float v_alpha = 0.0f;       // α軸電圧
+    float v_beta = 0.0f;        // β軸電圧
+    float v_u = 0.0f;           // U相電圧
+    float v_v = 0.0f;           // V相電圧
+    float v_w = 0.0f;           // W相電圧
+    int tgr_u = 0;              // U相PWM用TGR
+    int tgr_v = 0;              // V相PWM用TGR
+    int tgr_w = 0;              // W相PWM用TGR
+    tgr_values tgr_vals;        // U, V, W 各相TGR値
 
     /****************************
      *    Read Sensor Values    *
@@ -175,47 +236,21 @@ tgr_values vc_intr(void)
     ad_i_v = AD0.ADDR1 >> 6;
     ad_i_w = AD0.ADDR2 >> 6;
     ad_i_dc = AD0.ADDR3 >> 6;
-    // ad_theta = AD1.ADDR4 >> 6;
     ad_acc = AD1.ADDR4 >> 6;
     is_forward = PA.PRL.BIT.B0;
-    // resolver = PA.PRL.WORD & 0x03FF;
     resolver = (PA.PRL.WORD & 0x7FE0) >> 5;
 
-    // i_u = convert_to_current(AD0.ADDR0 >> 6);
-    // i_v = convert_to_current(AD0.ADDR1 >> 6);
-    // i_w = convert_to_current(AD0.ADDR2 >> 6);
     i_u = convert_to_current(ad_i_u);
     i_v = convert_to_current(ad_i_v);
     i_w = convert_to_current(ad_i_w);
     i_dc = convert_to_current(ad_i_dc);
-    // theta = convert_to_radian(AD1.ADDR4 >> 6);
-    // theta = convert_to_radian(ad_theta);
     theta = convert_to_radian(resolver);
-    // acc = 100 * ad_acc / 1024;
-
-    // if (theta < PHI)
-    // {
-    //     PE.DRL.BIT.B0 = 0;
-    //     PE.DRL.BIT.B1 = 0;
-    // }
-    // else if (theta < 2 * PHI)
-    // {
-    //     PE.DRL.BIT.B0 = 1;
-    //     PE.DRL.BIT.B1 = 0;
-    // }
-    // else
-    // {
-    //     PE.DRL.BIT.B0 = 1;
-    //     PE.DRL.BIT.B1 = 1;
-    // }
 
     /***************************************
      *    UVW -> Alpha&Beta -> dq          *
      ***************************************/
     i_alpha = i_u + i_v * cosf(PHI) + i_w * cosf(-PHI);
     i_beta = i_v + sinf(PHI) + i_w * sinf(-PHI);
-    // i_d = i_beta * cosf(theta) - i_alpha * sinf(theta);
-    // i_q = i_alpha * cosf(theta) + i_beta * sinf(theta);
     i_d = i_beta * cosf(theta) + i_alpha * sinf(theta);
     i_q = i_alpha * cosf(theta) - i_beta * sinf(theta);
 
@@ -224,14 +259,19 @@ tgr_values vc_intr(void)
      ***************************************/
     delta_systime = (float)(get_systime() - previous_systime) / 1000.0f;
     omega = (theta - previous_theta) / delta_systime;
-    omega_ref = ANGULAR_VELOCITY_MAX * (float)ad_acc / 1024.0f;
+    omega_ref = MAX_ANGULAR_VELOCITY * (float)ad_acc / 1024.0f;
+
+    if (!is_forward)
+        omega_ref *= -RELATIVE_SPEED_REVERSED;
+
     delta_omega = omega_ref - omega;
-    // i_d_ref = 0.0f;                      // I_d 理想値
-    // i_q_ref = K_P_ANG_VEL * delta_omega; // I_q 理想値
+    // i_d_ref = 0.0f;
+    // i_q_ref = K_P_ANG_VEL * delta_omega;
 
     // AT もどき作る？
-    i_d_ref = (K_P_ANG_VEL * delta_omega) * sinf(0); // Id 理想値
-    i_q_ref = (K_P_ANG_VEL * delta_omega) * cosf(0); // Iq 理想値
+    psy = PI / 2.0f;
+    i_d_ref = (K_P_ANG_VEL * delta_omega) * cosf(psy);
+    i_q_ref = (K_P_ANG_VEL * delta_omega) * sinf(psy);
 
     /***************************************
      *    PI Control (torque)              *
@@ -249,8 +289,6 @@ tgr_values vc_intr(void)
     /***************************************
      *    dq -> Alpha&Beta -> UVW          *
      ***************************************/
-    // v_alpha = v_d * cosf(theta) - v_q * sinf(theta);
-    // v_beta = v_q * cosf(theta) + v_d * sinf(theta);
     v_alpha = v_q * cosf(theta) + v_d * sinf(theta);
     v_beta = v_d * cosf(theta) - v_q * sinf(theta);
     v_u = v_alpha * 2.0f / 3.0f;
@@ -265,7 +303,6 @@ tgr_values vc_intr(void)
     tgr_v = adjust_tgr(convert_to_tgr(v_v));
     tgr_w = adjust_tgr(convert_to_tgr(v_w));
 
-    // update_cpwm_duty(tgr_u, tgr_v, tgr_w);
     tgr_vals.u = tgr_u;
     tgr_vals.v = tgr_v;
     tgr_vals.w = tgr_w;
@@ -309,15 +346,6 @@ void main(void)
 
     while (1)
     {
-        // if (++counter == 20000)
-        // {
-        //     counter = 0;
-        //     t++;
-        //     t %= 1024;
-        //     tgr_vals = vc_intr_test(t);
-        //     update_cpwm_duty(tgr_vals.u, tgr_vals.v, tgr_vals.w);
-        // }
-
         dms_on = PE.PRL.BIT.B4;
         protection_working = PE.PRL.BIT.B6;
         PE.DRL.BIT.B0 = pwm_working;
@@ -344,15 +372,6 @@ void main(void)
                 update_cpwm_duty(tgr_vals.u, tgr_vals.v, tgr_vals.w);
             }
         }
-        // if (++counter == 8000)
-        //     counter = 0;
-
-        // theta = 2.0f * PI * (float)counter / 8000.0f;
-
-        // update_cpwm_duty(
-        //     adjust_tgr((int)((float)TGR_LIMIT * ((1.0f + sinf(theta)) / 2.0f))),
-        //     adjust_tgr((int)((float)TGR_LIMIT * ((1.0f + sinf(theta)) / 2.0f))),
-        //     adjust_tgr((int)((float)TGR_LIMIT * ((1.0f + sinf(theta)) / 2.0f))));
     }
 }
 
